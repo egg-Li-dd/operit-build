@@ -486,6 +486,55 @@ object SystemToolPrompts {
         categoryFooter = "\n注意：记忆库和用户性格档案可能会在当前回复结束后由独立系统自动更新。如果需要立即管理记忆或更新用户偏好，请直接使用相应工具。"
     )
 
+    // ==================== AI 调用链观测工具 ====================
+    // 只读诊断类。与记忆工具相互独立：includeMemoryTools=false 不会过滤掉它，
+    // 它也有自己的可见性开关（出现在 getManageableToolPrompts 里，可被用户关掉）。
+    val callTraceTools = SystemToolPromptCategory(
+        categoryName = "AI Call Trace Tools",
+        tools = listOf(
+            ToolPrompt(
+                name = "query_call_traces",
+                description = "Lists recent AI call traces (read-only). Use it to answer \"which model/provider actually served the last call\", whether it succeeded, and how many tokens it used. Traces are local observation data; querying never triggers a new model call.",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "limit", type = "integer", description = "optional, int >= 1, maximum number of traces to return. Default 20, hard cap 200", required = false, default = "20"),
+                    ToolParameterSchema(name = "chat_id", type = "string", description = "optional, string, only return traces belonging to this chat", required = false),
+                    ToolParameterSchema(name = "status", type = "string", description = "optional, string, filter by status. One of RUNNING, SUCCESS, FAILED, DEGRADED. An unknown value is rejected with an error instead of returning an empty list", required = false)
+                )
+            ),
+            ToolPrompt(
+                name = "get_call_trace_detail",
+                description = "Reads one AI call trace and its span tree by trace_id (read-only). Shows the selected model/provider, per-span token/cost/duration, and failure reasons.",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "trace_id", type = "string", description = "required, string, the trace_id returned by query_call_traces", required = true)
+                )
+            )
+        ),
+        categoryFooter = "\nNote: Call traces are read-only observation data. Old traces may be purged by retention, so a trace_id can expire."
+    )
+
+    val callTraceToolsCn = SystemToolPromptCategory(
+        categoryName = "AI 调用链观测工具",
+        tools = listOf(
+            ToolPrompt(
+                name = "query_call_traces",
+                description = "列出最近的 AI 调用链（只读）。用于回答\"上一次实际用了哪个模型/供应商\"、是否成功、消耗了多少 token。调用链是本地观测数据，查询本身不会触发新的模型调用。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "limit", type = "integer", description = "可选, int >= 1, 返回的调用链条数上限。默认 20，硬上限 200", required = false, default = "20"),
+                    ToolParameterSchema(name = "chat_id", type = "string", description = "可选, string, 只返回该会话下的调用链", required = false),
+                    ToolParameterSchema(name = "status", type = "string", description = "可选, string, 按状态过滤，取值为 RUNNING、SUCCESS、FAILED、DEGRADED 之一。拼错会直接报错，而不是返回空列表", required = false)
+                )
+            ),
+            ToolPrompt(
+                name = "get_call_trace_detail",
+                description = "按 trace_id 读取单条 AI 调用链及其 span 树（只读）。展示实际选中的模型/供应商、每个 span 的 token/成本/耗时以及失败原因。",
+                parametersStructured = listOf(
+                    ToolParameterSchema(name = "trace_id", type = "string", description = "必需, string, query_call_traces 返回的 trace_id", required = true)
+                )
+            )
+        ),
+        categoryFooter = "\n注意：调用链是只读观测数据。旧调用链可能被保留策略清理，因此 trace_id 可能失效。"
+    )
+
     private val internalToolCategoriesEn: List<SystemToolPromptCategory> = SystemToolPromptsInternal.internalToolCategoriesEn
     private val internalToolCategoriesCn: List<SystemToolPromptCategory> = SystemToolPromptsInternal.internalToolCategoriesCn
     
@@ -540,7 +589,8 @@ object SystemToolPrompts {
             basicTools,
             adjustedFileSystemTools,
             httpTools,
-            memoryTools
+            memoryTools,
+            callTraceTools
         )
     }
 
@@ -615,7 +665,8 @@ object SystemToolPrompts {
             basicToolsCn,
             adjustedFileSystemTools,
             httpToolsCn,
-            memoryToolsCn
+            memoryToolsCn,
+            callTraceToolsCn
         )
     }
 
@@ -681,9 +732,9 @@ object SystemToolPrompts {
         toolOrder: List<String> = emptyList()
     ): List<ManageableToolPrompt> {
         val baseCategories = if (useEnglish) {
-            listOf(basicTools, fileSystemTools, httpTools, memoryTools)
+            listOf(basicTools, fileSystemTools, httpTools, memoryTools, callTraceTools)
         } else {
-            listOf(basicToolsCn, fileSystemToolsCn, httpToolsCn, memoryToolsCn)
+            listOf(basicToolsCn, fileSystemToolsCn, httpToolsCn, memoryToolsCn, callTraceToolsCn)
         }
 
         val result = baseCategories

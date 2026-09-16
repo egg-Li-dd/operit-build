@@ -158,6 +158,17 @@ object ToolGetter {
     }
 
     /**
+     * 获取调用链观测的只读查询工具执行器
+     *
+     * 只有标准版本：观测数据只在本地 Room，没有权限分支，也不需要 root/admin 实现。
+     * @param context 应用上下文
+     * @return 调用链查询工具执行器
+     */
+    fun getAiCallTraceToolExecutor(context: Context): StandardAiCallTraceToolExecutor {
+        return StandardAiCallTraceToolExecutor(context)
+    }
+
+    /**
      * 获取FFmpeg工具执行器
      * @param context 应用上下文
      * @return FFmpeg工具执行器实现（只有标准版本）

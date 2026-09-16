@@ -14,6 +14,17 @@ import com.ai.assistance.operit.data.model.getModelByIndex
 import com.ai.assistance.operit.data.model.getValidModelIndex
 import com.ai.assistance.operit.data.preferences.FunctionalConfigManager
 import com.ai.assistance.operit.data.preferences.ModelConfigManager
+import com.ai.assistance.operit.data.preferences.RouteStrategy
+import com.ai.assistance.operit.api.chat.enhance.trace.AiCallLeaseOutcome
+import com.ai.assistance.operit.api.chat.enhance.trace.AiCallTraceIds
+import com.ai.assistance.operit.api.chat.enhance.trace.AiCallTraceRecorder
+import com.ai.assistance.operit.api.chat.enhance.trace.applyToSpan
+import com.ai.assistance.operit.api.chat.enhance.trace.applyToTrace
+import com.ai.assistance.operit.data.model.AiCallSpanEntity
+import com.ai.assistance.operit.data.model.AiCallSpanStatus
+import com.ai.assistance.operit.data.model.AiCallSpanTier
+import com.ai.assistance.operit.data.model.AiCallTraceEntity
+import com.ai.assistance.operit.data.model.AiCallTraceStatus
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -26,16 +37,27 @@ class MultiServiceManager(private val context: Context) {
     }
 
     class ServiceLease internal constructor(
-        private val closeAction: suspend () -> Unit,
+        private val closeAction: suspend (AiCallLeaseOutcome?) -> Unit,
         val service: AIService,
         val modelConfig: ModelConfigData,
-        val modelParameters: List<ModelParameter<*>>
+        val modelParameters: List<ModelParameter<*>>,
+        /** 本次租约对应的调用链 id；未参与路由池观测时为 null。 */
+        val traceId: String? = null
     ) {
         private val closed = AtomicBoolean(false)
 
+        /**
+         * 业务层在 [close] 前回填的租约终态（token / 成败 / 错误）。
+         *
+         * 纯旁路观测数据：不回填时收口退化为 P0 语义（SUCCESS、零 token、无错误），
+         * 也不参与选路 / 缓存 / 限流任何决策。
+         */
+        @Volatile
+        var outcome: AiCallLeaseOutcome? = null
+
         suspend fun close() {
             if (closed.compareAndSet(false, true)) {
-                closeAction()
+                closeAction(outcome)
             }
         }
     }
@@ -47,6 +69,19 @@ class MultiServiceManager(private val context: Context) {
         var retired: Boolean = false,
         var released: Boolean = false
     )
+
+    /** 功能级解析结果：服务实例 + 本次选路决策明细（观测用）。 */
+    private class ResolvedFunctionService(
+        val managedService: ManagedService,
+        val decision: RouteDecision
+    )
+
+    /** 一次调用链观测的句柄：持有 trace/span 快照，结束时原地补齐终态。 */
+    private class RoutingObservation(val trace: AiCallTraceEntity, val span: AiCallSpanEntity) {
+        /** 本次观测的 trace id，供租约透传给业务层。 */
+        val traceId: String
+            get() = trace.traceId
+    }
 
     // 配置管理器
     private val functionalConfigManager = FunctionalConfigManager(context)
@@ -82,7 +117,7 @@ class MultiServiceManager(private val context: Context) {
     suspend fun getServiceForFunction(functionType: FunctionType): AIService {
         ensureInitialized()
         return serviceMutex.withLock {
-            getOrCreateServiceForFunctionLocked(functionType).service
+            getOrCreateServiceForFunctionLocked(functionType).managedService.service
         }
     }
 
@@ -94,19 +129,37 @@ class MultiServiceManager(private val context: Context) {
         }
     }
 
-    suspend fun acquireServiceForFunction(functionType: FunctionType): ServiceLease {
+    /**
+     * 获取功能级租约。
+     *
+     * [chatId] 仅用于调用链观测的会话归属（P1 补：让 trace 能按会话聚合），不参与任何选路决策；
+     * 缺省 null 时行为与 P0 完全一致。
+     */
+    suspend fun acquireServiceForFunction(
+        functionType: FunctionType,
+        chatId: String? = null
+    ): ServiceLease {
         ensureInitialized()
-        val managedService =
+        val resolved =
             serviceMutex.withLock {
-                getOrCreateServiceForFunctionLocked(functionType).also { it.activeLeases += 1 }
+                getOrCreateServiceForFunctionLocked(functionType)
+                    .also { it.managedService.activeLeases += 1 }
             }
+        val managedService = resolved.managedService
         val modelParameters =
             modelConfigManager.getModelParametersForConfig(managedService.modelConfig.id)
+        // 旁路观测：登记本次功能级选路决策。观测失败不影响调用结果。
+        val observation =
+            startRoutingObservation(functionType, resolved.decision, managedService, chatId)
         return ServiceLease(
-            closeAction = { releaseLease(managedService) },
+            closeAction = { outcome ->
+                releaseLease(managedService)
+                finishRoutingObservation(observation, outcome)
+            },
             service = managedService.service,
             modelConfig = managedService.modelConfig,
-            modelParameters = modelParameters
+            modelParameters = modelParameters,
+            traceId = observation?.traceId
         )
     }
 
@@ -119,34 +172,43 @@ class MultiServiceManager(private val context: Context) {
         val modelParameters =
             modelConfigManager.getModelParametersForConfig(managedService.modelConfig.id)
         return ServiceLease(
-            closeAction = { releaseLease(managedService) },
+            closeAction = { _ -> releaseLease(managedService) },
             service = managedService.service,
             modelConfig = managedService.modelConfig,
             modelParameters = modelParameters
         )
     }
 
-    private suspend fun getOrCreateServiceForFunctionLocked(functionType: FunctionType): ManagedService {
-        serviceInstances[functionType]?.let {
-            return it
+    private suspend fun getOrCreateServiceForFunctionLocked(
+        functionType: FunctionType
+    ): ResolvedFunctionService {
+        val pool = functionalConfigManager.getRoutePool(functionType)
+
+        // FIXED 策略下解析结果稳定，沿用功能级缓存直接命中；轮询策略每次显式选点
+        if (pool.strategy == RouteStrategy.FIXED) {
+            serviceInstances[functionType]?.let { cached ->
+                return ResolvedFunctionService(cached, RouteSelector.peekDecision(functionType, pool))
+            }
         }
 
-        val configMapping = functionalConfigManager.getConfigMappingForFunction(functionType)
-        val config = modelConfigManager.getModelConfigFlow(configMapping.configId).first()
+        val decision = RouteSelector.selectDecision(functionType, pool)
+        val candidate =
+                decision.candidate
+                        ?: error("功能 $functionType 没有可用候选：请显式启用至少一个候选")
 
-        val service = createServiceFromConfig(config, configMapping.modelIndex)
-        val managedService = ManagedService(
-            service = service,
-            modelConfig = config
-        )
+        // 统一走按 (configId, modelIndex) 缓存的服务实例，使轮询能真正在多个实例间切换
+        val managedService = getOrCreateServiceForConfigLocked(candidate.configId, candidate.modelIndex)
         serviceInstances[functionType] = managedService
 
         if (functionType == FunctionType.CHAT) {
             defaultService = managedService
         }
 
-        AppLogger.d(TAG, "已为功能${functionType}创建服务实例，使用配置${config.name}，模型索引${configMapping.modelIndex}")
-        return managedService
+        AppLogger.d(
+                TAG,
+                "已为功能${functionType}解析服务实例，配置=${candidate.configId}，模型索引=${candidate.modelIndex}，策略=${pool.strategy}，决策=${decision.reason}"
+        )
+        return ResolvedFunctionService(managedService, decision)
     }
 
     private suspend fun getOrCreateServiceForConfigLocked(configId: String, modelIndex: Int): ManagedService {
@@ -170,7 +232,7 @@ class MultiServiceManager(private val context: Context) {
     suspend fun getDefaultService(): AIService {
         ensureInitialized()
         return serviceMutex.withLock {
-            (defaultService ?: getOrCreateServiceForFunctionLocked(FunctionType.CHAT)).service
+            (defaultService ?: getOrCreateServiceForFunctionLocked(FunctionType.CHAT).managedService).service
         }
     }
 
@@ -223,18 +285,30 @@ class MultiServiceManager(private val context: Context) {
     suspend fun refreshServiceForFunction(functionType: FunctionType) {
         ensureInitialized()
         serviceMutex.withLock {
-            serviceInstances.remove(functionType)?.let { retireManagedServiceLocked(it) }
+            val pool = functionalConfigManager.getRoutePool(functionType)
 
-            if (functionType == FunctionType.CHAT) {
-                defaultService = null
-                val customServices = customServiceInstances.values.toList()
-                customServiceInstances.clear()
-                customServices.forEach { service ->
-                    retireManagedServiceLocked(service)
-                }
+            // 收回该功能池所有候选对应的服务实例（按 (configId, modelIndex) 归一化 key）
+            val retired = mutableSetOf<ManagedService>()
+            pool.candidates.forEach { candidate ->
+                val cacheKey = "${candidate.configId}#${candidate.modelIndex.coerceAtLeast(0)}"
+                customServiceInstances.remove(cacheKey)?.let { retired.add(it) }
             }
 
-            AppLogger.d(TAG, "已移除功能${functionType}的服务实例缓存")
+            // 功能级缓存只是一个"最近解析指针"，一并收回
+            serviceInstances.remove(functionType)?.let { retired.add(it) }
+
+            // 若其他功能仍指向被收回的实例，同步清空其指针，避免复用已退休服务
+            if (retired.isNotEmpty()) {
+                serviceInstances.entries.removeAll { entry -> entry.value in retired }
+            }
+
+            if (defaultService in retired) {
+                defaultService = null
+            }
+
+            retired.forEach { retireManagedServiceLocked(it) }
+
+            AppLogger.d(TAG, "已移除功能${functionType}路由池的服务实例缓存，候选数=${pool.candidates.size}")
         }
     }
 
@@ -292,6 +366,82 @@ class MultiServiceManager(private val context: Context) {
             AppLogger.d(TAG, "已释放服务资源: providerModel=${managedService.service.providerModel}")
         } catch (e: Exception) {
             AppLogger.e(TAG, "释放服务资源时出错", e)
+        }
+    }
+
+    /**
+     * 旁路观测：登记一次功能级选路决策。
+     *
+     * P0 只回答"这次路由选了谁"。观测设施缺席或写库异常时只记日志，绝不抛出，不影响调用结果。
+     */
+    private fun startRoutingObservation(
+        functionType: FunctionType,
+        decision: RouteDecision,
+        managedService: ManagedService,
+        chatId: String?
+    ): RoutingObservation? {
+        return try {
+            val config = managedService.modelConfig
+            val pickedIndex = decision.candidate?.modelIndex?.coerceAtLeast(0) ?: 0
+            val modelName = getModelByIndex(config.modelName, pickedIndex)
+            val provider = config.apiProviderType.name
+            val startedAt = System.currentTimeMillis()
+            val trace =
+                AiCallTraceEntity(
+                    traceId = AiCallTraceIds.newTraceId(),
+                    chatId = chatId?.takeIf { it.isNotBlank() },
+                    entryFunctionType = functionType.name,
+                    routePoolMode = true,
+                    strategy = decision.strategy.name,
+                    startedAt = startedAt,
+                    status = AiCallTraceStatus.RUNNING,
+                    selectedConfigId = config.id,
+                    selectedModelName = modelName,
+                    selectedProvider = provider,
+                    spanCount = 1
+                )
+            val span =
+                AiCallSpanEntity(
+                    spanId = AiCallTraceIds.newSpanId(),
+                    traceId = trace.traceId,
+                    parentSpanId = null,
+                    tier = AiCallSpanTier.PRIMARY,
+                    functionType = functionType.name,
+                    configId = config.id,
+                    modelName = modelName,
+                    provider = provider,
+                    strategy = decision.strategy.name,
+                    attemptIndex = 0,
+                    startedAt = startedAt,
+                    status = AiCallSpanStatus.RUNNING
+                )
+            AiCallTraceRecorder.startTrace(trace)
+            AiCallTraceRecorder.recordSpan(span)
+            RoutingObservation(trace, span)
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "登记调用链观测失败（旁路观测，不影响调用）", e)
+            null
+        }
+    }
+
+    /**
+     * 租约归还时收口：补齐 trace / span 的结束时间、状态与 token。
+     *
+     * [outcome] 由业务层在 `lease.close()` 前回填；为 null 时退化为 P0 语义
+     * （status=SUCCESS、零 token、无错误）。整个过程仍是旁路观测，异常只记日志。
+     */
+    private fun finishRoutingObservation(
+        observation: RoutingObservation?,
+        outcome: AiCallLeaseOutcome?
+    ) {
+        val active = observation ?: return
+        try {
+            val finishedAt = System.currentTimeMillis()
+            val durationMs = (finishedAt - active.span.startedAt).coerceAtLeast(0L)
+            AiCallTraceRecorder.updateTrace(outcome.applyToTrace(active.trace, finishedAt))
+            AiCallTraceRecorder.recordSpan(outcome.applyToSpan(active.span, finishedAt, durationMs))
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "收口调用链观测失败（旁路观测，不影响调用）", e)
         }
     }
 

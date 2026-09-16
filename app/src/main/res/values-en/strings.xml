@@ -4348,6 +4348,17 @@
     <string name="function_desc_audio_recognition">Used for audio content recognition and analysis. When calling read_file for audio, you can pass an intent for deeper understanding (e.g., transcription, summarization, speaker content). Recommend using models that support audio input or high-quality transcription.</string>
     <string name="function_desc_video_recognition">Used for video content recognition and analysis. When calling read_file for video, you can pass an intent for deeper understanding (e.g., frame-based understanding, scene description, dialogue summary). Recommend using multimodal models that support video/image input.</string>
 
+    <!-- Function Route Pool -->
+    <string name="function_route_pool_strategy">Routing strategy</string>
+    <string name="function_route_pool_title">Candidates</string>
+    <string name="function_route_pool_strategy_fixed">Fixed</string>
+    <string name="function_route_pool_strategy_round_robin">Round robin</string>
+    <string name="function_route_pool_strategy_weighted">Weighted</string>
+    <string name="function_route_pool_remove">Remove candidate</string>
+    <string name="function_route_pool_add_candidate">Add candidate</string>
+    <string name="function_route_pool_hint">Configure multiple candidate models for this function; the actual target is chosen by the routing strategy</string>
+    <string name="function_route_pool_at_least_one_enabled">At least one candidate must be enabled</string>
+
     <!-- Model Configuration -->
     <string name="overseas_provider_warning">Detected that you are in mainland China but selected an overseas service provider. Please confirm whether you have enabled proxy tools</string>
 
@@ -5468,6 +5479,9 @@
     <string name="toolreg_get_terminal_session_screen_desc">Get current terminal screen content for session [%1$s] (single screen)</string>
     <string name="toolreg_query_memory_desc">Query memory library: %1$s</string>
     <string name="toolreg_get_memory_by_title_desc">Get memory by title: %1$s</string>
+    <string name="toolreg_query_call_traces_desc">Query recent AI call traces (read-only)</string>
+    <string name="toolreg_query_call_traces_desc_status">Query recent AI call traces (read-only, status %1$s)</string>
+    <string name="toolreg_get_call_trace_detail_desc">Get call trace detail: %1$s</string>
 
     <string name="toolreg_user_pref_birth_date">Birth date</string>
     <string name="toolreg_user_pref_gender">Gender</string>

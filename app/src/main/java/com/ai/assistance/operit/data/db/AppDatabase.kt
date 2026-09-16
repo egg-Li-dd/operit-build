@@ -6,18 +6,27 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.ai.assistance.operit.data.dao.AiCallTraceDao
 import com.ai.assistance.operit.data.dao.ChatContentDao
 import com.ai.assistance.operit.data.dao.ChatDao
 import com.ai.assistance.operit.data.dao.MessageDao
 import com.ai.assistance.operit.data.dao.MessageVariantDao
+import com.ai.assistance.operit.data.model.AiCallSpanEntity
+import com.ai.assistance.operit.data.model.AiCallTraceEntity
 import com.ai.assistance.operit.data.model.ChatEntity
 import com.ai.assistance.operit.data.model.MessageEntity
 import com.ai.assistance.operit.data.model.MessageVariantEntity
 
-/** 应用数据库，包含聊天表和消息表 */
+/** 应用数据库，包含聊天表、消息表和 AI 调用链表 */
 @Database(
-    entities = [ChatEntity::class, MessageEntity::class, MessageVariantEntity::class],
-    version = 20,
+    entities = [
+        ChatEntity::class,
+        MessageEntity::class,
+        MessageVariantEntity::class,
+        AiCallTraceEntity::class,
+        AiCallSpanEntity::class
+    ],
+    version = 21,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +40,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageVariantDao(): MessageVariantDao
 
     abstract fun chatContentDao(): ChatContentDao
+
+    /** 获取 AI 调用链 DAO */
+    abstract fun aiCallTraceDao(): AiCallTraceDao
 
     companion object {
         @Volatile
@@ -221,6 +233,14 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
+        /** 20 -> 21：新增 AI 调用链两张表（trace / span）及其索引。DDL 与实体定义共用 AiCallTraceSchema。 */
+        private val MIGRATION_20_21 =
+            object : Migration(20, 21) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    AiCallTraceSchema.allStatements.forEach { db.execSQL(it) }
+                }
+            }
+
         // 定义从版本2到3的迁移
         private val MIGRATION_2_3 =
             object : Migration(2, 3) {
@@ -337,7 +357,8 @@ abstract class AppDatabase : RoomDatabase() {
                                 MIGRATION_16_17,
                                 MIGRATION_17_18,
                                 MIGRATION_18_19,
-                                MIGRATION_19_20
+                                MIGRATION_19_20,
+                                MIGRATION_20_21
                             ) // 添加新的迁移
                             .build()
                     INSTANCE = instance

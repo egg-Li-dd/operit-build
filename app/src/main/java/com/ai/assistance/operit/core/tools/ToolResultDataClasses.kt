@@ -2663,6 +2663,49 @@ data class FunctionModelBindingResultData(
     }
 }
 
+/** 功能候选池中的单个候选（工具返回项） */
+@Serializable
+data class FunctionRouteCandidateResultItem(
+    val configId: String,
+    val configName: String? = null,
+    val modelIndex: Int,
+    val actualModelIndex: Int? = null,
+    val selectedModel: String? = null,
+    val enabled: Boolean,
+    val weight: Int
+)
+
+/** 查询功能候选池结果 */
+@Serializable
+data class FunctionRoutePoolResultData(
+    val defaultConfigId: String,
+    val functionType: String,
+    val strategy: String,
+    val totalCandidates: Int,
+    val enabledCandidates: Int,
+    val primaryConfigId: String,
+    val primaryModelIndex: Int,
+    val candidates: List<FunctionRouteCandidateResultItem>
+) : ToolResultData() {
+    override fun toString(): String {
+        return "Function route pool: $functionType, strategy=$strategy, candidates=$enabledCandidates/$totalCandidates"
+    }
+}
+
+/** 设置功能候选池结果 */
+@Serializable
+data class FunctionRoutePoolUpdateResultData(
+    val functionType: String,
+    val strategy: String,
+    val totalCandidates: Int,
+    val enabledCandidates: Int,
+    val candidates: List<FunctionRouteCandidateResultItem>
+) : ToolResultData() {
+    override fun toString(): String {
+        return "Function route pool updated: $functionType, strategy=$strategy, candidates=$enabledCandidates/$totalCandidates"
+    }
+}
+
 /** 模型配置连接测试单项 */
 @Serializable
 data class ModelConfigConnectionTestItemResultData(

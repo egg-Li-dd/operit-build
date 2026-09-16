@@ -2950,6 +2950,17 @@ Acum poate fi utilizat în interfața de dialog AutoGLM A devenit un model.</str
     <string name="function_desc_audio_recognition">Utilizat pentru recunoașterea și analiza conținutului audio, apelread_fileInstrumentul poate fi utilizat atunci când se citește un fișier audiointentÎnțelegerea aprofundată a parametrilor (de exemplu, transcrierea/Concluzii/(Recunoașterea conținutului vorbirii). Se recomandă utilizarea unui model care acceptă intrare audio sau care oferă transcriere de înaltă calitate.</string>
     <string name="function_desc_video_recognition">Utilizat pentru recunoașterea și analiza conținutului video, apelareread_filePoate fi utilizat atunci când instrumentul citește un fișier videointentÎnțelegerea aprofundată a parametrilor (de exemplu, înțelegerea prin extragerea cadrelor)/Descrierea scenei/Rezumatul discuției). Se recomandă utilizarea unui videoclip/Model multimodal de introducere a imaginilor.</string>
 
+    <!-- Function Route Pool -->
+    <string name="function_route_pool_strategy">Strategie de rutare</string>
+    <string name="function_route_pool_title">Candidați</string>
+    <string name="function_route_pool_strategy_fixed">Fix</string>
+    <string name="function_route_pool_strategy_round_robin">Round robin</string>
+    <string name="function_route_pool_strategy_weighted">Ponderat</string>
+    <string name="function_route_pool_remove">Elimină candidatul</string>
+    <string name="function_route_pool_add_candidate">Adaugă candidat</string>
+    <string name="function_route_pool_hint">Configurează mai multe modele candidate pentru această funcție; ținta reală este aleasă de strategia de rutare</string>
+    <string name="function_route_pool_at_least_one_enabled">Cel puțin un candidat trebuie activat</string>
+
     <!-- Functional Prompt Config Screen -->
     <string name="advanced_config_notice">Dacă doriți să modificați configurările avansate, cum ar fi șabloanele de mesaje ale sistemului, accesați pagina „Gestionare toate mesajele”.</string>
     <string name="perm_default_desc">Permite aplicației să acceseze funcțiile sistemului</string>
@@ -5865,6 +5876,9 @@ Acum poate fi utilizat în interfața de dialog AutoGLM A devenit un model.</str
     <string name="toolreg_get_terminal_session_screen_desc">Obținerea sesiunii terminalului „%1$s» Conținutul actual al ecranului (un singur ecran)</string>
     <string name="toolreg_query_memory_desc">Consultarea bazei de date: %1$s</string>
     <string name="toolreg_get_memory_by_title_desc">Obținerea amintirilor pe baza titlului: %1$s</string>
+    <string name="toolreg_query_call_traces_desc">Interoghează urmele recente ale apelurilor AI (doar citire)</string>
+    <string name="toolreg_query_call_traces_desc_status">Interoghează urmele recente ale apelurilor AI (doar citire, status %1$s)</string>
+    <string name="toolreg_get_call_trace_detail_desc">Obține detaliile urmei apelului: %1$s</string>
 
     <string name="toolreg_user_pref_birth_date">Ziua de naștere</string>
     <string name="toolreg_user_pref_gender">Sexul</string>

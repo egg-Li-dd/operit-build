@@ -1,6 +1,7 @@
 package com.ai.assistance.operit.core.tools.defaultTool.standard
 
 import android.content.Context
+import com.ai.assistance.operit.R
 import com.ai.assistance.operit.api.chat.EnhancedAIService
 import com.ai.assistance.operit.api.chat.llmprovider.ModelConfigConnectionTester
 import com.ai.assistance.operit.api.speech.SpeechServiceFactory
@@ -11,6 +12,9 @@ import com.ai.assistance.operit.core.tools.FunctionModelBindingResultData
 import com.ai.assistance.operit.core.tools.FunctionModelConfigResultData
 import com.ai.assistance.operit.core.tools.FunctionModelConfigsResultData
 import com.ai.assistance.operit.core.tools.FunctionModelMappingResultItem
+import com.ai.assistance.operit.core.tools.FunctionRouteCandidateResultItem
+import com.ai.assistance.operit.core.tools.FunctionRoutePoolResultData
+import com.ai.assistance.operit.core.tools.FunctionRoutePoolUpdateResultData
 import com.ai.assistance.operit.core.tools.CharacterCardActivationResultData
 import com.ai.assistance.operit.core.tools.CharacterCardCreateResultData
 import com.ai.assistance.operit.core.tools.CharacterCardDeleteResultData
@@ -61,6 +65,9 @@ import com.ai.assistance.operit.data.model.getModelList
 import com.ai.assistance.operit.data.model.getValidModelIndex
 import com.ai.assistance.operit.data.preferences.FunctionalConfigManager
 import com.ai.assistance.operit.data.preferences.FunctionConfigMapping
+import com.ai.assistance.operit.data.preferences.FunctionConfigPool
+import com.ai.assistance.operit.data.preferences.FunctionRouteCandidate
+import com.ai.assistance.operit.data.preferences.RouteStrategy
 import com.ai.assistance.operit.data.preferences.ModelConfigManager
 import com.ai.assistance.operit.data.preferences.SpeechServicesPreferences
 import com.ai.assistance.operit.ui.features.startup.screens.PluginLoadingStateRegistry
@@ -1385,6 +1392,233 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
                 success = false,
                 result = StringResultData(""),
                 error = e.message ?: "Failed to set function model config"
+            )
+        }
+    }
+
+    suspend fun getFunctionRoutePool(tool: AITool): ToolResult {
+        val functionTypeRaw = getParameterValue(tool, "function_type")?.trim().orEmpty()
+        if (functionTypeRaw.isBlank()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: function_type"
+            )
+        }
+
+        return try {
+            val functionType =
+                parseFunctionType(functionTypeRaw)
+                    ?: return ToolResult(
+                        toolName = tool.name,
+                        success = false,
+                        result = StringResultData(""),
+                        error = "Invalid function_type: $functionTypeRaw"
+                    )
+
+            val modelConfigManager = ModelConfigManager(context)
+            val functionalConfigManager = FunctionalConfigManager(context)
+            modelConfigManager.initializeIfNeeded()
+            functionalConfigManager.initializeIfNeeded()
+
+            val pool = functionalConfigManager.getRoutePool(functionType)
+            val primary = pool.primaryCandidate()
+
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    FunctionRoutePoolResultData(
+                        defaultConfigId = FunctionalConfigManager.DEFAULT_CONFIG_ID,
+                        functionType = functionType.name,
+                        strategy = pool.strategy.name,
+                        totalCandidates = pool.candidates.size,
+                        enabledCandidates = pool.candidates.count { it.enabled },
+                        primaryConfigId = primary.configId,
+                        primaryModelIndex = primary.modelIndex,
+                        candidates = buildRouteCandidateResultItems(modelConfigManager, pool.candidates)
+                    )
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.message ?: "Failed to get function route pool"
+            )
+        }
+    }
+
+    suspend fun setFunctionRoutePool(tool: AITool): ToolResult {
+        val functionTypeRaw = getParameterValue(tool, "function_type")?.trim().orEmpty()
+        if (functionTypeRaw.isBlank()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: function_type"
+            )
+        }
+        val candidatesJson = getParameterValue(tool, "candidates_json")?.trim().orEmpty()
+        if (candidatesJson.isBlank()) {
+            return ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = "Missing required parameter: candidates_json"
+            )
+        }
+
+        return try {
+            val functionType =
+                parseFunctionType(functionTypeRaw)
+                    ?: return ToolResult(
+                        toolName = tool.name,
+                        success = false,
+                        result = StringResultData(""),
+                        error = "Invalid function_type: $functionTypeRaw"
+                    )
+
+            val strategyRaw = getParameterValue(tool, "strategy")?.trim().orEmpty()
+            val strategy =
+                if (strategyRaw.isBlank()) {
+                    RouteStrategy.FIXED
+                } else {
+                    RouteStrategy.values().firstOrNull {
+                        it.name.equals(strategyRaw, ignoreCase = true)
+                    }
+                        ?: return ToolResult(
+                            toolName = tool.name,
+                            success = false,
+                            result = StringResultData(""),
+                            error = "Invalid strategy: $strategyRaw (expected FIXED/ROUND_ROBIN/WEIGHTED)"
+                        )
+                }
+
+            val candidates = parseRouteCandidates(candidatesJson)
+            if (candidates.isEmpty()) {
+                return ToolResult(
+                    toolName = tool.name,
+                    success = false,
+                    result = StringResultData(""),
+                    error = "candidates_json must contain at least one candidate"
+                )
+            }
+            if (candidates.none { it.enabled }) {
+                return ToolResult(
+                    toolName = tool.name,
+                    success = false,
+                    result = StringResultData(""),
+                    error = context.getString(R.string.function_route_pool_at_least_one_enabled)
+                )
+            }
+
+            val modelConfigManager = ModelConfigManager(context)
+            val functionalConfigManager = FunctionalConfigManager(context)
+            modelConfigManager.initializeIfNeeded()
+            functionalConfigManager.initializeIfNeeded()
+
+            // 校验候选引用的配置存在，并将 modelIndex 规范化为可用索引
+            val normalizedCandidates =
+                candidates.map { candidate ->
+                    val config =
+                        modelConfigManager.getModelConfig(candidate.configId)
+                            ?: throw IllegalArgumentException(
+                                "Model config not found: ${candidate.configId}"
+                            )
+                    val actualModelIndex =
+                        getValidModelIndex(config.modelName, candidate.modelIndex)
+                    candidate.copy(modelIndex = actualModelIndex)
+                }
+
+            val pool = FunctionConfigPool(candidates = normalizedCandidates, strategy = strategy)
+            functionalConfigManager.saveRoutePool(functionType, pool)
+            runCatching { EnhancedAIService.refreshServiceForFunction(context, functionType) }
+
+            ToolResult(
+                toolName = tool.name,
+                success = true,
+                result =
+                    FunctionRoutePoolUpdateResultData(
+                        functionType = functionType.name,
+                        strategy = strategy.name,
+                        totalCandidates = normalizedCandidates.size,
+                        enabledCandidates = normalizedCandidates.count { it.enabled },
+                        candidates =
+                            buildRouteCandidateResultItems(modelConfigManager, normalizedCandidates)
+                    )
+            )
+        } catch (e: IllegalArgumentException) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.message ?: "Invalid parameter"
+            )
+        } catch (e: Exception) {
+            ToolResult(
+                toolName = tool.name,
+                success = false,
+                result = StringResultData(""),
+                error = e.message ?: "Failed to set function route pool"
+            )
+        }
+    }
+
+    /** 解析 candidates_json：兼容字符串数值，缺省 enabled=true、weight=1，weight 下限为 1。 */
+    private fun parseRouteCandidates(candidatesJson: String): List<FunctionRouteCandidate> {
+        val array =
+            try {
+                JSONArray(candidatesJson)
+            } catch (e: Exception) {
+                throw IllegalArgumentException("Invalid candidates_json: ${e.message}")
+            }
+        val candidates = ArrayList<FunctionRouteCandidate>(array.length())
+        for (index in 0 until array.length()) {
+            val obj =
+                array.optJSONObject(index)
+                    ?: throw IllegalArgumentException("candidate[$index] must be a JSON object")
+            val configId = obj.optString("config_id").trim()
+            if (configId.isEmpty()) {
+                throw IllegalArgumentException("candidate[$index] missing config_id")
+            }
+            val modelIndex = obj.optInt("model_index", 0).coerceAtLeast(0)
+            val enabled = if (obj.has("enabled")) obj.optBoolean("enabled", true) else true
+            val weight = obj.optInt("weight", 1).coerceAtLeast(1)
+            candidates.add(
+                FunctionRouteCandidate(
+                    configId = configId,
+                    modelIndex = modelIndex,
+                    enabled = enabled,
+                    weight = weight
+                )
+            )
+        }
+        return candidates
+    }
+
+    /** 将候选池项映射为工具返回项，附带配置名与规范化后的实际模型。 */
+    private fun buildRouteCandidateResultItems(
+        modelConfigManager: ModelConfigManager,
+        candidates: List<FunctionRouteCandidate>
+    ): List<FunctionRouteCandidateResultItem> {
+        return candidates.map { candidate ->
+            val config = modelConfigManager.getModelConfig(candidate.configId)
+            val actualModelIndex =
+                config?.let { getValidModelIndex(it.modelName, candidate.modelIndex) }
+            val selectedModel =
+                config?.let {
+                    getModelByIndex(it.modelName, actualModelIndex ?: candidate.modelIndex)
+                }
+            FunctionRouteCandidateResultItem(
+                configId = candidate.configId,
+                configName = config?.name,
+                modelIndex = candidate.modelIndex,
+                actualModelIndex = actualModelIndex,
+                selectedModel = selectedModel,
+                enabled = candidate.enabled,
+                weight = candidate.weight
             )
         }
     }

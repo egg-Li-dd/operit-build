@@ -2552,6 +2552,17 @@ Agora é possível usar o modo AutoGLM na interface de diálogo.</string>
     <string name="function_desc_image_recognition">Usado para reconhecimento e análise de conteúdo de imagem. Ao chamar a ferramenta read_file para ler imagens, ela suporta parâmetros de intenção para uma compreensão aprofundada. Recomenda-se a utilização de modelos multimodais que apoiem a visão.</string>
     <string name="function_desc_audio_recognition">Usado para reconhecimento e análise de conteúdo de áudio. Ao chamar a ferramenta read_file para ler áudio, você pode usar o parâmetro intent para compreensão aprofundada (como transliteração/resumo/identificação de conteúdo falado). Recomenda-se usar um modelo que suporte entrada de áudio ou transcrição de alta qualidade.</string>
     <string name="function_desc_video_recognition">Usado para reconhecimento e análise de conteúdo de vídeo. Ao chamar a ferramenta read_file para ler o vídeo, você pode usar o parâmetro intent para uma compreensão aprofundada (como extração de quadro/descrição da cena/resumo do diálogo). Recomenda-se usar modelos multimodais que suportem entrada de vídeo/imagem.</string>
+
+    <!-- Function Route Pool -->
+    <string name="function_route_pool_strategy">Estratégia de roteamento</string>
+    <string name="function_route_pool_title">Candidatos</string>
+    <string name="function_route_pool_strategy_fixed">Fixo</string>
+    <string name="function_route_pool_strategy_round_robin">Round robin</string>
+    <string name="function_route_pool_strategy_weighted">Ponderado</string>
+    <string name="function_route_pool_remove">Remover candidato</string>
+    <string name="function_route_pool_add_candidate">Adicionar candidato</string>
+    <string name="function_route_pool_hint">Configure vários modelos candidatos para esta função; o destino real é escolhido pela estratégia de roteamento</string>
+    <string name="function_route_pool_at_least_one_enabled">Pelo menos um candidato deve estar habilitado</string>
     <string name="advanced_config_notice">Se você precisar modificar configurações avançadas, como modelos de prompt do sistema, vá para a página "Gerenciar todas as palavras de prompt".</string>
     <string name="perm_default_desc">Permitir que aplicativos acessem recursos do sistema</string>
     <string name="debug_info">informações de depuração</string>
@@ -4716,6 +4727,9 @@ Agora é possível usar o modo AutoGLM na interface de diálogo.</string>
     <string name="toolreg_get_terminal_session_screen_desc">Obtenha o conteúdo da tela atual da sessão de terminal "%1$s" (tela única)</string>
     <string name="toolreg_query_memory_desc">Consultar banco de dados de perguntas: %1$s</string>
     <string name="toolreg_get_memory_by_title_desc">Obtenha memória com base no título: %1$s</string>
+    <string name="toolreg_query_call_traces_desc">Consultar rastros de chamadas de IA recentes (somente leitura)</string>
+    <string name="toolreg_query_call_traces_desc_status">Consultar rastros de chamadas de IA recentes (somente leitura, status %1$s)</string>
+    <string name="toolreg_get_call_trace_detail_desc">Obter detalhes do rastro de chamada: %1$s</string>
     <string name="toolreg_user_pref_birth_date">Aniversário</string>
     <string name="toolreg_user_pref_gender">gênero</string>
     <string name="toolreg_user_pref_personality">personagem</string>

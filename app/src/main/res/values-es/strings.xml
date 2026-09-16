@@ -2969,6 +2969,17 @@ Ahora puede usar el modo AutoGLM en la interfaz de conversación.</string>
     <string name="function_desc_image_recognition">Se utiliza para el reconocimiento y análisis de contenido de imágenes. Al llamar a la herramienta read_file para leer imágenes, se admite el parámetro intent para una comprensión profunda. Se recomienda usar un modelo multimodal compatible con visión.</string>
     <string name="function_desc_audio_recognition">Se utiliza para el reconocimiento y análisis de contenido de audio. Al llamar a la herramienta read_file para leer audio, se puede usar el parámetro intent para una comprensión profunda (como transcripción/resumen/reconocimiento del contenido hablado). Se recomienda usar un modelo compatible con entrada de audio o transcripción de alta calidad.</string>
     <string name="function_desc_video_recognition">Se utiliza para el reconocimiento y análisis de contenido de video. Al llamar a la herramienta read_file para leer video, se puede usar el parámetro intent para una comprensión profunda (como extracción de fotogramas/descripción de escenas/resumen de diálogos). Se recomienda usar un modelo multimodal compatible con entrada de video/imagen.</string>
+
+    <!-- Function Route Pool -->
+    <string name="function_route_pool_strategy">Estrategia de enrutamiento</string>
+    <string name="function_route_pool_title">Candidatos</string>
+    <string name="function_route_pool_strategy_fixed">Fijo</string>
+    <string name="function_route_pool_strategy_round_robin">Round robin</string>
+    <string name="function_route_pool_strategy_weighted">Ponderado</string>
+    <string name="function_route_pool_remove">Eliminar candidato</string>
+    <string name="function_route_pool_add_candidate">Añadir candidato</string>
+    <string name="function_route_pool_hint">Configura varios modelos candidatos para esta función; el destino real se elige según la estrategia de enrutamiento</string>
+    <string name="function_route_pool_at_least_one_enabled">Se debe habilitar al menos un candidato</string>
     <string name="perm_default_desc">Permite que la aplicación acceda a funciones del sistema</string>
     <string name="debug_info">Información de depuración</string>
     <string name="error_info">Información de error</string>
@@ -5253,6 +5264,9 @@ Ahora puede usar el modo AutoGLM en la interfaz de conversación.</string>
     <string name="toolreg_get_terminal_session_screen_desc">Obtener contenido actual de pantalla de sesión de terminal «%1$s» (una pantalla)</string>
     <string name="toolreg_query_memory_desc">Consultar banco de recuerdos: %1$s</string>
     <string name="toolreg_get_memory_by_title_desc">Obtener recuerdo por título: %1$s</string>
+    <string name="toolreg_query_call_traces_desc">Consultar rastros de llamadas de IA recientes (solo lectura)</string>
+    <string name="toolreg_query_call_traces_desc_status">Consultar rastros de llamadas de IA recientes (solo lectura, estado %1$s)</string>
+    <string name="toolreg_get_call_trace_detail_desc">Obtener detalle del rastro de llamada: %1$s</string>
     <string name="toolreg_user_pref_birth_date">Fecha de nacimiento</string>
     <string name="toolreg_user_pref_gender">Género</string>
     <string name="toolreg_user_pref_personality">Personalidad</string>

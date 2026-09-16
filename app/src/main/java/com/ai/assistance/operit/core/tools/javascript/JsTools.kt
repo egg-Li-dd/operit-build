@@ -1043,6 +1043,17 @@ fun getJsToolsDefinition(): String {
                     if (modelIndex !== undefined && modelIndex !== null) params.model_index = String(modelIndex);
                     return toolCall("set_function_model_config", params);
                 },
+                getFunctionRoutePool: (functionType) => {
+                    return toolCall("get_function_route_pool", { function_type: String(functionType ?? "") });
+                },
+                setFunctionRoutePool: (functionType, candidates, strategy) => {
+                    const params = {
+                        function_type: String(functionType ?? ""),
+                        candidates_json: JSON.stringify(candidates ?? []),
+                        strategy: String(strategy ?? "")
+                    };
+                    return toolCall("set_function_route_pool", params);
+                },
                 testModelConfigConnection: (configId, modelIndex) => {
                     const params = { config_id: String(configId ?? "") };
                     if (modelIndex !== undefined && modelIndex !== null) params.model_index = String(modelIndex);
@@ -1366,6 +1377,32 @@ fun getJsToolsDefinition(): String {
                     const normalizedCallerCardId = Tools.Memory._normalizeCallerCardId(options.callerCardId);
                     if (normalizedCallerCardId !== undefined) params.caller_card_id = normalizedCallerCardId;
                     return toolCall("delete_memory_link", params);
+                }
+            },
+
+            // 调用链观测（只读）：查询最近的 AI 调用链
+            AiCallTraces: {
+                // 查询最近的 AI 调用链列表
+                query: (limit, chatId, status) => {
+                    const options =
+                        limit && typeof limit === 'object' && !Array.isArray(limit)
+                            ? limit
+                            : { limit, chatId, status };
+                    const params = {};
+                    if (options.limit !== undefined) params.limit = options.limit;
+                    if (options.chatId !== undefined && options.chatId !== null && String(options.chatId).length > 0)
+                        params.chat_id = String(options.chatId);
+                    if (options.status !== undefined && options.status !== null && String(options.status).length > 0)
+                        params.status = String(options.status);
+                    return toolCall("query_call_traces", params);
+                },
+                // 读取单条调用链详情（含 span 树）
+                detail: (traceId) => {
+                    const options =
+                        traceId && typeof traceId === 'object' && !Array.isArray(traceId)
+                            ? traceId
+                            : { traceId };
+                    return toolCall("get_call_trace_detail", { trace_id: options.traceId });
                 }
             },
             // 计算功能

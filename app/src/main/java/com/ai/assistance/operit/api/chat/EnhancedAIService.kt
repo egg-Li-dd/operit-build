@@ -11,6 +11,7 @@ import com.ai.assistance.operit.api.chat.enhance.ConversationService
 import com.ai.assistance.operit.api.chat.enhance.FileBindingService
 import com.ai.assistance.operit.api.chat.enhance.MultiServiceManager
 import com.ai.assistance.operit.api.chat.enhance.ToolExecutionManager
+import com.ai.assistance.operit.api.chat.enhance.trace.AiCallLeaseOutcome
 import com.ai.assistance.operit.api.chat.llmprovider.AIService
 import com.ai.assistance.operit.core.chat.logMessageTiming
 import com.ai.assistance.operit.core.chat.messageTimingNow
@@ -30,6 +31,7 @@ import com.ai.assistance.operit.core.tools.ToolExecutionLimits
 import com.ai.assistance.operit.core.tools.climode.CliToolModeSupport
 import com.ai.assistance.operit.core.tools.climode.ToolExposureMode
 import com.ai.assistance.operit.core.tools.packTool.PackageManager
+import com.ai.assistance.operit.data.model.AiCallSpanStatus
 import com.ai.assistance.operit.data.model.FunctionType
 import com.ai.assistance.operit.data.model.InputProcessingState
 import com.ai.assistance.operit.data.model.PromptFunctionType
@@ -421,6 +423,54 @@ class EnhancedAIService private constructor(private val context: Context) {
             get() = lease.modelConfig
         val modelParameters: List<ModelParameter<*>>
             get() = lease.modelParameters
+
+        // --- P1 回填：本租约的观测终态（纯旁路数据，不参与任何决策） ---
+
+        /** 本租约内累计的输入 token（含缓存命中）。 */
+        @Volatile
+        var inputTokens: Long = 0L
+
+        /** 本租约内累计的输出 token。 */
+        @Volatile
+        var outputTokens: Long = 0L
+
+        /** 本租约内累计的缓存命中输入 token。 */
+        @Volatile
+        var cachedInputTokens: Long = 0L
+
+        /** 本租约是否以异常收场。 */
+        @Volatile
+        var failed: Boolean = false
+
+        private var errorType: String? = null
+        private var errorMessage: String? = null
+
+        /** 累计单轮 token；观测不该影响业务，故不抛出、不负值。 */
+        fun accumulateTokens(inputTokens: Long, outputTokens: Long, cachedInputTokens: Long) {
+            this.inputTokens += inputTokens.coerceAtLeast(0L)
+            this.outputTokens += outputTokens.coerceAtLeast(0L)
+            this.cachedInputTokens += cachedInputTokens.coerceAtLeast(0L)
+        }
+
+        /** 记录首次失败；后续失败不覆盖根因。 */
+        fun markFailed(error: Throwable) {
+            if (failed) return
+            // 先写细节再翻 volatile 标志位：`failed` 的写是释放屏障，
+            // 读侧一旦看到 true，errorType / errorMessage 必然可见。
+            errorType = error::class.simpleName
+            errorMessage = error.message
+            failed = true
+        }
+
+        /** 组装交给观测收口的租约终态。 */
+        fun toLeaseOutcome(): AiCallLeaseOutcome =
+            AiCallLeaseOutcome(
+                status = if (failed) AiCallSpanStatus.FAILED else AiCallSpanStatus.SUCCESS,
+                inputTokens = inputTokens,
+                outputTokens = outputTokens,
+                errorType = errorType,
+                errorMessage = errorMessage
+            )
     }
 
     private data class MessageExecutionContext(
@@ -430,6 +480,8 @@ class EnhancedAIService private constructor(private val context: Context) {
         val isConversationActive: AtomicBoolean = AtomicBoolean(true),
         val conversationHistory: MutableList<PromptTurn>,
         val eventChannel: MutableSharedStream<TextStreamEvent>,
+        /** 本次调用所属会话；功能级选路可能发生在 chat 上下文之外，此时为 null。 */
+        val chatId: String? = null,
         var modelExecutionSnapshot: ModelExecutionSnapshot? = null
     )
 
@@ -477,7 +529,7 @@ class EnhancedAIService private constructor(private val context: Context) {
                     modelIndex = (chatModelIndexOverride ?: 0).coerceAtLeast(0)
                 )
             } else {
-                multiServiceManager.acquireServiceForFunction(functionType)
+                multiServiceManager.acquireServiceForFunction(functionType, context.chatId)
             }
         val snapshot = ModelExecutionSnapshot(lease)
         context.modelExecutionSnapshot = snapshot
@@ -487,6 +539,8 @@ class EnhancedAIService private constructor(private val context: Context) {
     private suspend fun releaseModelExecutionSnapshot(context: MessageExecutionContext) {
         val snapshot = context.modelExecutionSnapshot ?: return
         context.modelExecutionSnapshot = null
+        // P1 回填：归还前把租约内累计的 token / 终态写回，供观测收口落到 span（旁路，不影响业务）
+        snapshot.lease.outcome = snapshot.toLeaseOutcome()
         snapshot.lease.close()
     }
 
@@ -941,7 +995,8 @@ class EnhancedAIService private constructor(private val context: Context) {
                 MessageExecutionContext(
                     executionId = nextExecutionContextId.incrementAndGet(),
                     conversationHistory = chatHistory.toMutableList(),
-                    eventChannel = eventChannel
+                    eventChannel = eventChannel,
+                    chatId = chatId
                 )
             registerExecutionContext(execContext)
             var hadFatalError = false
@@ -1208,6 +1263,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                     accumulatedOutputTokenCount += outputTokens
                     accumulatedCachedInputTokenCount =
                         accumulatedCachedInputTokenCount + cachedInputTokens
+                    // P1 回填：把本轮累计 token 沉淀到租约快照（旁路观测，不参与决策）
+                    execContext.modelExecutionSnapshot?.accumulateTokens(
+                        inputTokens = inputTokens,
+                        outputTokens = outputTokens,
+                        cachedInputTokens = cachedInputTokens
+                    )
                     currentRequestInputTokenCount = 0L
                     currentRequestOutputTokenCount = 0L
                     currentRequestCachedInputTokenCount = 0L
@@ -1239,9 +1300,11 @@ class EnhancedAIService private constructor(private val context: Context) {
                         AppLogger.d(TAG, "Stream closed after execution context was invalidated.")
                     }
                 } else {
-                    hadFatalError = true
-                    // Handle any exceptions
-                    AppLogger.e(TAG, "发送消息时发生错误: ${e.message}", e)
+                        hadFatalError = true
+                        // Handle any exceptions
+                        AppLogger.e(TAG, "发送消息时发生错误: ${e.message}", e)
+                        // P1 回填：记下失败终态，租约归还时写回 span（旁路观测）
+                        execContext.modelExecutionSnapshot?.markFailed(e)
                     withContext(Dispatchers.Main) {
                         _inputProcessingState.value =
                                 InputProcessingState.Error(message = context.getString(R.string.enhanced_error_with_message, e.message ?: ""))
@@ -2422,6 +2485,12 @@ class EnhancedAIService private constructor(private val context: Context) {
                 accumulatedOutputTokenCount += outputTokens
                 accumulatedCachedInputTokenCount =
                     accumulatedCachedInputTokenCount + cachedInputTokens
+                // P1 回填：把本轮累计 token 沉淀到租约快照（旁路观测，不参与决策）
+                modelSnapshot.accumulateTokens(
+                    inputTokens = inputTokens,
+                    outputTokens = outputTokens,
+                    cachedInputTokens = cachedInputTokens
+                )
                 currentRequestInputTokenCount = 0L
                 currentRequestOutputTokenCount = 0L
                 currentRequestCachedInputTokenCount = 0L

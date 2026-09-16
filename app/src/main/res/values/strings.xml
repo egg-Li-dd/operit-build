@@ -2976,6 +2976,17 @@
     <string name="function_desc_image_recognition">用于图像内容识别和分析，调用read_file工具读取图片时支持intent参数进行深度理解。建议使用支持视觉的多模态模型。</string>
     <string name="function_desc_audio_recognition">用于音频内容识别和分析，调用read_file工具读取音频时可使用intent参数进行深度理解（如转写/总结/识别说话内容）。建议使用支持音频输入或高质量转写的模型。</string>
     <string name="function_desc_video_recognition">用于视频内容识别和分析，调用read_file工具读取视频时可使用intent参数进行深度理解（如抽帧理解/场景描述/对话总结）。建议使用支持视频/图像输入的多模态模型。</string>
+
+    <!-- Function Route Pool -->
+    <string name="function_route_pool_strategy">选路策略</string>
+    <string name="function_route_pool_title">候选池</string>
+    <string name="function_route_pool_strategy_fixed">固定</string>
+    <string name="function_route_pool_strategy_round_robin">轮询</string>
+    <string name="function_route_pool_strategy_weighted">加权</string>
+    <string name="function_route_pool_remove">移除候选</string>
+    <string name="function_route_pool_add_candidate">添加候选</string>
+    <string name="function_route_pool_hint">为该功能配置多个候选模型，实际调用落点由选路策略决定</string>
+    <string name="function_route_pool_at_least_one_enabled">至少需要启用一个候选</string>
     
     <!-- Functional Prompt Config Screen -->
     <string name="advanced_config_notice">如需修改系统提示模板等高级配置，请前往「管理所有提示词」页面。</string>
@@ -5913,6 +5924,9 @@
     <string name="toolreg_get_terminal_session_screen_desc">获取终端会话「%1$s」当前屏幕内容（单屏）</string>
     <string name="toolreg_query_memory_desc">查询记忆库: %1$s</string>
     <string name="toolreg_get_memory_by_title_desc">根据标题获取记忆: %1$s</string>
+    <string name="toolreg_query_call_traces_desc">查询最近的 AI 调用链（只读）</string>
+    <string name="toolreg_query_call_traces_desc_status">查询最近的 AI 调用链（只读，状态 %1$s）</string>
+    <string name="toolreg_get_call_trace_detail_desc">读取调用链详情: %1$s</string>
 
     <string name="toolreg_user_pref_birth_date">生日</string>
     <string name="toolreg_user_pref_gender">性别</string>

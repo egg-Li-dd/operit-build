@@ -687,6 +687,31 @@ fun registerAllTools(handler: AIToolHandler, context: Context) {
     )
 
     handler.registerTool(
+            name = "get_function_route_pool",
+            descriptionGenerator = { tool ->
+                val functionType = tool.parameters.find { it.name == "function_type" }?.value ?: ""
+                "Get function route pool: $functionType"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.getFunctionRoutePool(tool) }
+            }
+    )
+
+    handler.registerTool(
+            name = "set_function_route_pool",
+            descriptionGenerator = { tool ->
+                val functionType = tool.parameters.find { it.name == "function_type" }?.value ?: ""
+                val strategy = tool.parameters.find { it.name == "strategy" }?.value ?: ""
+                "Set function route pool: $functionType (strategy=$strategy)"
+            },
+            executor = { tool ->
+                val softwareSettingsTools = ToolGetter.getSoftwareSettingsModifyTools(context)
+                runBlocking(Dispatchers.IO) { softwareSettingsTools.setFunctionRoutePool(tool) }
+            }
+    )
+
+    handler.registerTool(
             name = "test_model_config_connection",
             descriptionGenerator = { tool ->
                 val configId = tool.parameters.find { it.name == "config_id" }?.value ?: ""
@@ -2730,7 +2755,34 @@ fun registerAllTools(handler: AIToolHandler, context: Context) {
             },
             executor = { tool ->
                 val ffmpegConvertTool = ToolGetter.getFFmpegConvertToolExecutor(context)
-                ffmpegConvertTool.invoke(tool)
+ffmpegConvertTool.invoke(tool)
+            }
+    )
+
+    // 调用链观测查询工具 - 只读，列出最近的 AI 调用链
+    handler.registerTool(
+            name = "query_call_traces",
+            descriptionGenerator = { tool ->
+                val status = tool.parameters.find { it.name == "status" }?.value ?: ""
+                if (status.isBlank()) s(R.string.toolreg_query_call_traces_desc)
+                else s(R.string.toolreg_query_call_traces_desc_status, status)
+            },
+            executor = { tool ->
+                val traceTool = ToolGetter.getAiCallTraceToolExecutor(context)
+                traceTool.invoke(tool)
+            }
+    )
+
+    // 调用链观测查询工具 - 只读，读取单条调用链及其 span 树
+    handler.registerTool(
+            name = "get_call_trace_detail",
+            descriptionGenerator = { tool ->
+                val traceId = tool.parameters.find { it.name == "trace_id" }?.value ?: ""
+                s(R.string.toolreg_get_call_trace_detail_desc, traceId)
+            },
+            executor = { tool ->
+                val traceTool = ToolGetter.getAiCallTraceToolExecutor(context)
+                traceTool.invoke(tool)
             }
     )
 }

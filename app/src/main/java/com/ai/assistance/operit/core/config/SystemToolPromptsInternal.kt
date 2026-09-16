@@ -2489,6 +2489,44 @@ object SystemToolPromptsInternal {
                                 )
                         ),
                         ToolPrompt(
+                            name = "get_function_route_pool",
+                            description = "Get the full route pool (ordered candidates + strategy) of one function_type.",
+                            parametersStructured =
+                                listOf(
+                                    ToolParameterSchema(
+                                        name = "function_type",
+                                        type = "string",
+                                        description = "function type enum name (CHAT/SUMMARY/MEMORY/UI_CONTROLLER/TRANSLATION/GREP/IMAGE_RECOGNITION/AUDIO_RECOGNITION/VIDEO_RECOGNITION)",
+                                        required = true
+                                    )
+                                )
+                        ),
+                        ToolPrompt(
+                            name = "set_function_route_pool",
+                            description = "Replace the whole route pool (candidates + strategy) of one function_type. At least one candidate must be enabled.",
+                            parametersStructured =
+                                listOf(
+                                    ToolParameterSchema(
+                                        name = "function_type",
+                                        type = "string",
+                                        description = "function type enum name (CHAT/SUMMARY/MEMORY/UI_CONTROLLER/TRANSLATION/GREP/IMAGE_RECOGNITION/AUDIO_RECOGNITION/VIDEO_RECOGNITION)",
+                                        required = true
+                                    ),
+                                    ToolParameterSchema(
+                                        name = "candidates_json",
+                                        type = "string",
+                                        description = "JSON array of candidates, e.g. [{\"config_id\":\"c1\",\"model_index\":0,\"enabled\":true,\"weight\":1}]",
+                                        required = true
+                                    ),
+                                    ToolParameterSchema(
+                                        name = "strategy",
+                                        type = "string",
+                                        description = "routing strategy: FIXED / ROUND_ROBIN / WEIGHTED",
+                                        required = true
+                                    )
+                                )
+                        ),
+                        ToolPrompt(
                             name = "test_model_config_connection",
                             description = "Run the same model-config connection checks as settings UI for a given config_id.",
                             parametersStructured =
@@ -5477,6 +5515,44 @@ object SystemToolPromptsInternal {
                                         description = "可选，当 model_name 为多模型时指定索引",
                                         required = false,
                                         default = "0"
+                                    )
+                                )
+                        ),
+                        ToolPrompt(
+                            name = "get_function_route_pool",
+                            description = "获取某个 function_type 的完整候选池（有序候选 + 选路策略）。",
+                            parametersStructured =
+                                listOf(
+                                    ToolParameterSchema(
+                                        name = "function_type",
+                                        type = "string",
+                                        description = "功能类型枚举名（CHAT/SUMMARY/MEMORY/UI_CONTROLLER/TRANSLATION/GREP/IMAGE_RECOGNITION/AUDIO_RECOGNITION/VIDEO_RECOGNITION）",
+                                        required = true
+                                    )
+                                )
+                        ),
+                        ToolPrompt(
+                            name = "set_function_route_pool",
+                            description = "整体替换某个 function_type 的候选池（候选 + 选路策略）。至少需要启用一个候选。",
+                            parametersStructured =
+                                listOf(
+                                    ToolParameterSchema(
+                                        name = "function_type",
+                                        type = "string",
+                                        description = "功能类型枚举名（CHAT/SUMMARY/MEMORY/UI_CONTROLLER/TRANSLATION/GREP/IMAGE_RECOGNITION/AUDIO_RECOGNITION/VIDEO_RECOGNITION）",
+                                        required = true
+                                    ),
+                                    ToolParameterSchema(
+                                        name = "candidates_json",
+                                        type = "string",
+                                        description = "候选数组的 JSON 字符串，例如 [{\"config_id\":\"c1\",\"model_index\":0,\"enabled\":true,\"weight\":1}]",
+                                        required = true
+                                    ),
+                                    ToolParameterSchema(
+                                        name = "strategy",
+                                        type = "string",
+                                        description = "选路策略：FIXED / ROUND_ROBIN / WEIGHTED",
+                                        required = true
                                     )
                                 )
                         ),

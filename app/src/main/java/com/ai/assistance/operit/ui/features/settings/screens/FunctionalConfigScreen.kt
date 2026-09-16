@@ -37,6 +37,9 @@ import com.ai.assistance.operit.data.model.getValidModelIndex
 import com.ai.assistance.operit.data.model.ModelConfigData
 import com.ai.assistance.operit.data.preferences.FunctionalConfigManager
 import com.ai.assistance.operit.data.preferences.FunctionConfigMapping
+import com.ai.assistance.operit.data.preferences.FunctionConfigPool
+import com.ai.assistance.operit.data.preferences.FunctionRouteCandidate
+import com.ai.assistance.operit.data.preferences.RouteStrategy
 import com.ai.assistance.operit.data.preferences.ModelConfigManager
 import com.ai.assistance.operit.core.config.FunctionalPrompts
 import com.ai.assistance.operit.util.ImagePoolManager
@@ -63,6 +66,8 @@ fun FunctionalConfigScreen(
             functionalConfigManager.functionConfigMappingFlow.collectAsState(initial = emptyMap())
     val configMappingWithIndex =
             functionalConfigManager.functionConfigMappingWithIndexFlow.collectAsState(initial = emptyMap())
+    val routePools =
+            functionalConfigManager.functionRoutePoolFlow.collectAsState(initial = emptyMap())
 
     // 配置摘要列表
     var configSummaries by remember { mutableStateOf<List<ModelConfigSummary>>(emptyList()) }
@@ -160,28 +165,17 @@ fun FunctionalConfigScreen(
 
                 // 功能类型列表
                 items(FunctionType.values()) { functionType ->
-                    val currentConfigMapping =
-                            configMappingWithIndex.value[functionType]
-                                    ?: FunctionConfigMapping(FunctionalConfigManager.DEFAULT_CONFIG_ID, 0)
-                    val currentConfig = configSummaries.find { it.id == currentConfigMapping.configId }
+                    val pool = routePools.value[functionType] ?: FunctionConfigPool()
 
                     FunctionConfigCard(
                             functionType = functionType,
-                            currentConfig = currentConfig,
-                            currentModelIndex = currentConfigMapping.modelIndex,
+                            pool = pool,
                             availableConfigs = configSummaries,
-                            onConfigSelected = { configId, modelIndex ->
+                            onPoolChanged = { newPool ->
                                 scope.launch {
-                                    functionalConfigManager.setConfigForFunction(
-                                            functionType,
-                                            configId,
-                                            modelIndex
-                                    )
+                                    functionalConfigManager.saveRoutePool(functionType, newPool)
                                     // 刷新服务实例
-                                    EnhancedAIService.refreshServiceForFunction(
-                                            context,
-                                            functionType
-                                    )
+                                    EnhancedAIService.refreshServiceForFunction(context, functionType)
                                     showSaveSuccess = true
                                 }
                             }
@@ -259,13 +253,28 @@ fun FunctionalConfigScreen(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun FunctionConfigCard(
         functionType: FunctionType,
-        currentConfig: ModelConfigSummary?,
-        currentModelIndex: Int,
+        pool: FunctionConfigPool,
         availableConfigs: List<ModelConfigSummary>,
-        onConfigSelected: (String, Int) -> Unit
+        onPoolChanged: (FunctionConfigPool) -> Unit
 ) {
+    val primaryCandidate = pool.primaryCandidate()
+    val currentConfig = availableConfigs.find { it.id == primaryCandidate.configId }
+    val currentModelIndex = primaryCandidate.modelIndex
+
+    // 在配置列表中选中一个落点 = 改写主候选（保留其余候选与策略不变）
+    val setPrimaryCandidate: (String, Int) -> Unit = { configId, modelIndex ->
+        val candidates = pool.candidates.toMutableList()
+        if (candidates.isEmpty()) {
+            candidates.add(FunctionRouteCandidate(configId, modelIndex))
+        } else {
+            candidates[0] = candidates[0].copy(configId = configId, modelIndex = modelIndex)
+        }
+        onPoolChanged(pool.copy(candidates = candidates))
+    }
+
     var expanded by remember { mutableStateOf(false) }
     var expandedConfigId by remember { mutableStateOf<String?>(null) } // 记录当前展开的配置的模型列表
     val context = LocalContext.current
@@ -766,7 +775,7 @@ fun FunctionConfigCard(
                                                         if (functionType == FunctionType.CHAT && singleModelName.contains("autoglm", ignoreCase = true)) {
                                                             showAutoGlmError()
                                                         } else {
-                                                            onConfigSelected(config.id, 0)
+                                                            setPrimaryCandidate(config.id, 0)
                                                             expanded = false
                                                         }
                                                     }
@@ -860,7 +869,7 @@ fun FunctionConfigCard(
                                                         if (functionType == FunctionType.CHAT && modelName.contains("autoglm", ignoreCase = true)) {
                                                             showAutoGlmError()
                                                         } else {
-                                                            onConfigSelected(config.id, index)
+                                                            setPrimaryCandidate(config.id, index)
                                                             expanded = false
                                                             expandedConfigId = null
                                                         }
@@ -901,6 +910,122 @@ fun FunctionConfigCard(
                                     }
                                 }
                             }
+                        }
+
+                        HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        )
+
+                        Text(
+                                text = stringResource(id = R.string.function_route_pool_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+
+                        // 候选池：选路策略
+                        Text(
+                                text = stringResource(id = R.string.function_route_pool_strategy),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            RouteStrategy.values().forEach { strategy ->
+                                FilterChip(
+                                        selected = pool.strategy == strategy,
+                                        onClick = { onPoolChanged(pool.copy(strategy = strategy)) },
+                                        label = { Text(routeStrategyLabel(strategy)) }
+                                )
+                            }
+                        }
+
+                        // 候选列表：增删启停
+                        Text(
+                                text = stringResource(id = R.string.function_route_pool_title),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                        )
+                        pool.candidates.forEachIndexed { index, candidate ->
+                            val candidateConfig = availableConfigs.find { it.id == candidate.configId }
+                            val candidateModelName =
+                                    candidateConfig?.let { cfg ->
+                                        val models = getModelList(cfg.modelName)
+                                        if (models.size > 1)
+                                                getModelByIndex(
+                                                        cfg.modelName,
+                                                        getValidModelIndex(cfg.modelName, candidate.modelIndex)
+                                                )
+                                        else cfg.modelName
+                                    }
+                                            ?: candidate.configId
+
+                            Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                        checked = candidate.enabled,
+                                        onCheckedChange = { checked ->
+                                            val candidates = pool.candidates.toMutableList()
+                                            candidates[index] = candidate.copy(enabled = checked)
+                                            onPoolChanged(pool.copy(candidates = candidates))
+                                        }
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                            text = candidateConfig?.name ?: candidate.configId,
+                                            style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                            text = candidateModelName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(
+                                        onClick = {
+                                            val candidates = pool.candidates.toMutableList()
+                                            candidates.removeAt(index)
+                                            onPoolChanged(pool.copy(candidates = candidates))
+                                        },
+                                        enabled = pool.candidates.size > 1
+                                ) {
+                                    Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription =
+                                                    stringResource(id = R.string.function_route_pool_remove)
+                                    )
+                                }
+                            }
+                        }
+
+                        OutlinedButton(
+                                onClick = {
+                                    val defaultConfigId =
+                                            availableConfigs.firstOrNull()?.id
+                                                    ?: FunctionalConfigManager.DEFAULT_CONFIG_ID
+                                    onPoolChanged(
+                                            pool.copy(
+                                                    candidates =
+                                                            pool.candidates +
+                                                                    FunctionRouteCandidate(defaultConfigId, 0)
+                                            )
+                                    )
+                                },
+                                modifier = Modifier.padding(top = 4.dp),
+                                shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(id = R.string.function_route_pool_add_candidate))
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -950,5 +1075,15 @@ fun getFunctionDescription(functionType: FunctionType): String {
         FunctionType.IMAGE_RECOGNITION -> stringResource(id = R.string.function_desc_image_recognition)
         FunctionType.AUDIO_RECOGNITION -> stringResource(id = R.string.function_desc_audio_recognition)
         FunctionType.VIDEO_RECOGNITION -> stringResource(id = R.string.function_desc_video_recognition)
+    }
+}
+
+// 选路策略显示名
+@Composable
+fun routeStrategyLabel(strategy: RouteStrategy): String {
+    return when (strategy) {
+        RouteStrategy.FIXED -> stringResource(id = R.string.function_route_pool_strategy_fixed)
+        RouteStrategy.ROUND_ROBIN -> stringResource(id = R.string.function_route_pool_strategy_round_robin)
+        RouteStrategy.WEIGHTED -> stringResource(id = R.string.function_route_pool_strategy_weighted)
     }
 }

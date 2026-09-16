@@ -24,6 +24,7 @@ import com.ai.assistance.operit.BuildConfig
 import com.ai.assistance.operit.R
 import com.ai.assistance.operit.core.chat.AIMessageManager
 import com.ai.assistance.operit.api.chat.AIForegroundService
+import com.ai.assistance.operit.api.chat.enhance.trace.AiCallTraceRecorder
 import com.ai.assistance.operit.api.chat.library.MemoryAutoSaveScheduler
 import com.ai.assistance.operit.plugins.PluginRegistry
 import com.ai.assistance.operit.plugins.lifecycle.AppLifecycleEvent
@@ -36,6 +37,7 @@ import com.ai.assistance.operit.core.tools.system.Terminal
 import com.ai.assistance.operit.core.workflow.WorkflowSchedulerInitializer
 import com.ai.assistance.operit.data.backup.RoomDatabaseBackupPreferences
 import com.ai.assistance.operit.data.backup.RoomDatabaseBackupScheduler
+import com.ai.assistance.operit.data.db.AiCallTraceRetentionScheduler
 import com.ai.assistance.operit.data.db.AppDatabase
 import com.ai.assistance.operit.data.preferences.CharacterCardManager
 import com.ai.assistance.operit.data.preferences.ExternalHttpApiPreferences
@@ -291,6 +293,14 @@ class OperitApplication : Application(), ImageLoaderFactory, WorkConfiguration.P
             database.openHelper.writableDatabase
             AppLogger.d(TAG, "【启动计时】数据库预加载完成（异步） - ${System.currentTimeMillis() - dbStartTime}ms")
         }
+
+        // 绑定 AI 调用链记录器的 Room 出口（旁路观测，幂等）
+        AiCallTraceRecorder.install(applicationContext)
+        AppLogger.d(TAG, "【启动计时】AI 调用链记录器已绑定 - ${System.currentTimeMillis() - startTime}ms")
+
+        // 注册调用链保留调度（每日清理过期 trace，旁路维护，幂等）
+        AiCallTraceRetentionScheduler.schedulePeriodic(applicationContext)
+        AppLogger.d(TAG, "【启动计时】调用链保留调度已注册 - ${System.currentTimeMillis() - startTime}ms")
 
         // 初始化全局图片加载器，设置强大的缓存策略
         // 创建自定义 OkHttp 客户端，增加超时时间以支持慢速图片服务器

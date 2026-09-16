@@ -2947,6 +2947,17 @@ Kini anda boleh menggunakan mod AutoGLM di antara muka perbualan.</string>
     <string name="function_desc_image_recognition">Digunakan untuk pengenalan dan analisis kandungan imej, memanggil alat read_file untuk membaca gambar dengan menyokong parameter intent untuk pemahaman mendalam. Disyorkan menggunakan model multimodal yang menyokong penglihatan.</string>
     <string name="function_desc_audio_recognition">Digunakan untuk pengenalan dan analisis kandungan audio, memanggil alat read_file untuk membaca audio dengan menggunakan parameter intent untuk pemahaman mendalam (seperti transkripsi/ringkasan/pengenalan kandungan pertuturan). Disyorkan menggunakan model yang menyokong input audio atau transkripsi berkualiti tinggi.</string>
     <string name="function_desc_video_recognition">Digunakan untuk pengenalan dan analisis kandungan video, memanggil alat read_file untuk membaca video dengan menggunakan parameter intent untuk pemahaman mendalam (seperti pemahaman ekstrak binggan/penerangan adegan/ringkasan dialog). Disyorkan menggunakan model multimodal yang menyokong input video/imej.</string>
+
+    <!-- Function Route Pool -->
+    <string name="function_route_pool_strategy">Strategi penghalaan</string>
+    <string name="function_route_pool_title">Calon</string>
+    <string name="function_route_pool_strategy_fixed">Tetap</string>
+    <string name="function_route_pool_strategy_round_robin">Round robin</string>
+    <string name="function_route_pool_strategy_weighted">Berpemberat</string>
+    <string name="function_route_pool_remove">Buang calon</string>
+    <string name="function_route_pool_add_candidate">Tambah calon</string>
+    <string name="function_route_pool_hint">Konfigurasikan berbilang model calon untuk fungsi ini; sasaran sebenar dipilih mengikut strategi penghalaan</string>
+    <string name="function_route_pool_at_least_one_enabled">Sekurang-kurangnya satu calon mesti diaktifkan</string>
     <string name="advanced_config_notice">Jika perlu mengubah suai templat petunjuk sistem dan konfigurasi lanjutan lain, sila pergi ke halaman "Urus Semua Petunjuk Kata".</string>
     <string name="perm_default_desc">Membenarkan aplikasi mengakses fungsi sistem</string>
     <string name="debug_info">Maklumat penyahpepijatan</string>
@@ -5019,6 +5030,9 @@ Kini anda boleh menggunakan mod AutoGLM di antara muka perbualan.</string>
     <string name="toolreg_get_terminal_session_screen_desc">Dapatkan kandungan skrin semasa sesi terminal "%1$s" (skrin tunggal)</string>
     <string name="toolreg_query_memory_desc">Siasat pangkalan ingatan: %1$s</string>
     <string name="toolreg_get_memory_by_title_desc">Dapatkan ingatan mengikut tajuk: %1$s</string>
+    <string name="toolreg_query_call_traces_desc">Kueri jejak panggilan AI terkini (baca sahaja)</string>
+    <string name="toolreg_query_call_traces_desc_status">Kueri jejak panggilan AI terkini (baca sahaja, status %1$s)</string>
+    <string name="toolreg_get_call_trace_detail_desc">Dapatkan butiran jejak panggilan: %1$s</string>
     <string name="toolreg_user_pref_birth_date">Tarikh lahir</string>
 
     <string name="screen_ocr_selection_ocr_header">【Pemilihan Pengecaman】\n</string>
