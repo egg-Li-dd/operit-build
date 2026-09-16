@@ -1599,7 +1599,7 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
     }
 
     /** 将候选池项映射为工具返回项，附带配置名与规范化后的实际模型。 */
-    private fun buildRouteCandidateResultItems(
+    private suspend fun buildRouteCandidateResultItems(
         modelConfigManager: ModelConfigManager,
         candidates: List<FunctionRouteCandidate>
     ): List<FunctionRouteCandidateResultItem> {

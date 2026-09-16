@@ -87,19 +87,8 @@ class FunctionalConfigManager(private val context: Context) {
     // 获取ModelConfigManager实例用于配置查询
     private val modelConfigManager = ModelConfigManager(context)
 
-    // 获取功能配置映射（保持向后兼容，值为主候选的configId）
-    val functionConfigMappingFlow: Flow<Map<FunctionType, String>> =
-            functionRoutePoolFlow.map { pools ->
-                pools.mapValues { it.value.primaryMapping().configId }
-            }
-
-    // 获取完整的功能配置映射（包含modelIndex，值为主候选）
-    val functionConfigMappingWithIndexFlow: Flow<Map<FunctionType, FunctionConfigMapping>> =
-            functionRoutePoolFlow.map { pools ->
-                pools.mapValues { it.value.primaryMapping() }
-            }
-
     // 获取功能候选池（唯一可信源）
+    // 注意：必须声明在依赖它的 flow 之前，Kotlin 属性按声明顺序初始化。
     val functionRoutePoolFlow: Flow<Map<FunctionType, FunctionConfigPool>> =
             context.functionalConfigDataStore.data.map { preferences ->
                 val poolJson = preferences[FUNCTION_ROUTE_POOL]
@@ -116,6 +105,18 @@ class FunctionalConfigManager(private val context: Context) {
                     // 新键缺失：从旧键一次性迁移
                     migrateFromLegacy(preferences[FUNCTION_CONFIG_MAPPING])
                 }
+            }
+
+    // 获取功能配置映射（保持向后兼容，值为主候选的configId）
+    val functionConfigMappingFlow: Flow<Map<FunctionType, String>> =
+            functionRoutePoolFlow.map { pools ->
+                pools.mapValues { it.value.primaryMapping().configId }
+            }
+
+    // 获取完整的功能配置映射（包含modelIndex，值为主候选）
+    val functionConfigMappingWithIndexFlow: Flow<Map<FunctionType, FunctionConfigMapping>> =
+            functionRoutePoolFlow.map { pools ->
+                pools.mapValues { it.value.primaryMapping() }
             }
 
     /** 旧键 -> 候选池（单候选、FIXED）。 */
